@@ -240,7 +240,7 @@ function buildParams(r){
 }
 async function post(formId, paramsString){
   if (!navigator.onLine) throw new Error('offline');
-  await fetch(`https://docs.google.com/forms/d/e/${formId}/formResponse`, { method:'POST', mode:'no-cors', body:new URLSearchParams(paramsString), keepalive:true });
+  await fetch(`https://docs.google.com/forms/d/e/${formId}/formResponse`, { method:'POST', mode:'no-cors', body:new URLSearchParams(paramsString) });
 }
 
 async function flushQueue(){
