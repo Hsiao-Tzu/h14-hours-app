@@ -79,7 +79,7 @@
 <body>
 <header>
   <h1>紀錄時數</h1>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">連線中</span></div>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">連線中</span><button type="button" id="retry" class="chip" style="display:none;padding:4px 10px;font-size:12px">重送</button></div>
 </header>
 <main>
   <section class="card">
@@ -156,7 +156,7 @@ const $ = id => document.getElementById(id);
 const el = { projects:$('projects'), name:$('name'), date:$('date'), content:$('content'), contentList:$('contentList'),
   slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'),
   err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
-  toast:$('toast'), dot:$('dot'), statusText:$('statusText'), slotReq:$('slotReq'), installHint:$('installHint') };
+  toast:$('toast'), dot:$('dot'), statusText:$('statusText'), retry:$('retry'), slotReq:$('slotReq'), installHint:$('installHint') };
 
 let project = store.get('project', 'internal');
 let hoursManual = false;
@@ -239,24 +239,46 @@ function buildParams(r){
   return p;
 }
 async function post(formId, paramsString){
-  if (!navigator.onLine) throw new Error('offline');
-  await fetch(`https://docs.google.com/forms/d/e/${formId}/formResponse`, { method:'POST', mode:'no-cors', body:new URLSearchParams(paramsString) });
+  const url = `https://docs.google.com/forms/d/e/${formId}/formResponse`;
+  try { await fetch(url, { method:'POST', mode:'no-cors', body:new URLSearchParams(paramsString) }); return 'fetch'; }
+  catch(e1){
+    try { await postViaForm(url, paramsString); return 'form'; }
+    catch(e2){ throw new Error(`fetch: ${e1 && e1.message || e1}; form: ${e2 && e2.message || e2}`); }
+  }
+}
+// 備援：隱藏 iframe + 表單 POST（不受 CORS 限制）
+function postViaForm(url, paramsString){
+  return new Promise((resolve, reject) => {
+    const name = 'gf_' + Date.now();
+    const ifr = document.createElement('iframe'); ifr.name = name; ifr.setAttribute('aria-hidden','true'); ifr.style.display = 'none';
+    const form = document.createElement('form'); form.method = 'POST'; form.action = url; form.target = name; form.style.display = 'none';
+    for (const [k, v] of new URLSearchParams(paramsString)){ const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; form.appendChild(i); }
+    document.body.appendChild(ifr); document.body.appendChild(form);
+    let settled = false;
+    const finish = ok => { if (settled) return; settled = true; clearTimeout(timer); setTimeout(() => { ifr.remove(); form.remove(); }, 1500); ok ? resolve() : reject(new Error('timeout')); };
+    const timer = setTimeout(() => finish(false), 15000);
+    setTimeout(() => { ifr.addEventListener('load', () => finish(true)); form.submit(); }, 120);
+  });
 }
 
 async function flushQueue(){
   const q = store.get('queue', []);
-  if (!q.length || !navigator.onLine) return;
+  if (!q.length) return;
   const rest = [];
   for (const item of q){
-    try { await post(item.formId, item.params); markSent(item.ts); }
-    catch(e){ rest.push(item); }
+    try { const via = await post(item.formId, item.params); markSent(item.ts, via); }
+    catch(e){ item.err = String(e && e.message || e); markErr(item.ts, item.err); rest.push(item); }
   }
   store.set('queue', rest);
   renderHist(); renderStatus();
 }
-function markSent(ts){
+function markSent(ts, via){
   const h = store.get('history', []);
-  const it = h.find(x => x.ts === ts); if (it){ it.status = 'sent'; store.set('history', h); }
+  const it = h.find(x => x.ts === ts); if (it){ it.status = 'sent'; it.via = via; delete it.err; store.set('history', h); }
+}
+function markErr(ts, err){
+  const h = store.get('history', []);
+  const it = h.find(x => x.ts === ts); if (it){ it.err = err; store.set('history', h); }
 }
 
 el.submit.onclick = () => {
@@ -277,13 +299,13 @@ el.confirm.onclick = async () => {
   const params = buildParams(r).toString();
   const rec = { ts, project, label:r.f.label, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, status:'queued' };
   let sent = false;
-  try { await post(r.f.id, params); sent = true; } catch(e){}
+  try { rec.via = await post(r.f.id, params); sent = true; } catch(e){ rec.err = String(e && e.message || e); }
   rec.status = sent ? 'sent' : 'queued';
   if (!sent){ const q = store.get('queue', []); q.push({ ts, formId:r.f.id, params }); store.set('queue', q); }
   const h = store.get('history', []); h.unshift(rec); store.set('history', h.slice(0, 30));
   rememberContent(r.content);
   el.confirm.disabled = false; closeSheet();
-  toast(sent ? `已送出到「${r.f.label}」` : '目前離線，已暫存，連線後自動送出');
+  toast(sent ? `已送出到「${r.f.label}」` : '送出失敗，已暫存，可按「重送」');
   resetEntry(); renderHist(); renderStatus();
 };
 
@@ -299,7 +321,7 @@ function renderContents(){
 }
 function renderHist(){
   const h = store.get('history', []);
-  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.label)}｜${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜TWD ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>`).join('')
+  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.label)}｜${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜TWD ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>${x.err ? `<li class="l" style="padding-top:0;border:none;color:var(--danger)">錯誤：${escapeHtml(x.err)}</li>` : ''}`).join('')
     : '<li class="l">還沒有紀錄</li>';
 }
 function renderStatus(){
@@ -307,7 +329,9 @@ function renderStatus(){
   const on = navigator.onLine;
   el.dot.className = 'dot' + (on ? '' : ' off');
   el.statusText.textContent = (on ? '連線中' : '離線') + (q ? `・待送 ${q} 筆` : '');
+  el.retry.style.display = q ? '' : 'none';
 }
+async function retryQueue(){ el.retry.disabled = true; await flushQueue(); el.retry.disabled = false; toast(store.get('queue', []).length ? '還是失敗，錯誤已列在下方' : '已全部送出'); }
 
 // ===== UI 小工具 =====
 function openSheet(){ el.sheetBg.classList.add('show'); el.sheet.classList.add('show'); }
@@ -320,6 +344,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
   el.name.value = store.get('name', '');
   el.date.value = todayLocal();
   renderProjects(); addSlot(); renderContents(); renderHist(); renderStatus(); recalc();
+  el.retry.onclick = retryQueue;
   window.addEventListener('online', () => { renderStatus(); flushQueue(); });
   window.addEventListener('offline', renderStatus);
   flushQueue();
