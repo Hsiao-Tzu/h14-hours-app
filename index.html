@@ -106,9 +106,10 @@
     <div class="calc">
       <div><label class="lbl" for="hours" style="margin:0">時數<span class="auto" id="hoursAuto">自動</span></label>
         <input id="hours" type="number" inputmode="decimal" step="0.5" min="0" style="width:120px"></div>
-      <div style="text-align:right"><label class="lbl" for="amount" style="margin:0">勞務總金額 TWD（時數×時薪）</label>
-        <input id="amount" type="number" inputmode="numeric" step="1" min="0" style="width:140px;text-align:right"></div>
+      <div style="text-align:right"><label class="lbl" for="amount" style="margin:0">勞務總金額（時數×時薪）</label>
+        <input id="amount" type="number" inputmode="decimal" step="1" min="0" style="width:140px;text-align:right"></div>
     </div>
+    <div class="chips" id="currency" style="margin-top:10px;justify-content:flex-end"></div>
     <div class="hint">時數＝各時段自動加總，可手動改；清空即恢復自動。</div>
   </section>
 
@@ -154,11 +155,13 @@ const store = {
 
 const $ = id => document.getElementById(id);
 const el = { projects:$('projects'), name:$('name'), date:$('date'), content:$('content'), contentList:$('contentList'),
-  slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'),
+  slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'), currency:$('currency'),
   err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
   toast:$('toast'), dot:$('dot'), statusText:$('statusText'), retry:$('retry'), slotReq:$('slotReq'), installHint:$('installHint') };
 
 let project = store.get('project', 'internal');
+let currency = store.get('currency', 'TWD');
+const CURRENCIES = ['TWD', 'CNY'];
 let hoursManual = false;
 
 // ===== 專案 chips =====
@@ -172,6 +175,16 @@ function renderProjects(){
   }
   el.slotReq.textContent = FORMS[project].slotRequired ? '必填' : '選填';
 }
+function renderCurrency(){
+  el.currency.innerHTML = '';
+  for (const c of CURRENCIES){
+    const b = document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=c;
+    b.setAttribute('aria-pressed', c===currency);
+    b.onclick = () => { currency = c; store.set('currency', c); renderCurrency(); };
+    el.currency.appendChild(b);
+  }
+}
+function amountText(r){ return currency === 'TWD' ? r.amount : `${currency} ${r.amount}`; }
 
 // ===== 時段 =====
 function addSlot(start='', end=''){
@@ -235,7 +248,7 @@ function buildParams(r){
   p.set(ENTRY.content, r.content);
   if (r.slots.length) p.set(ENTRY.slots, slotsText(r.slots));
   p.set(ENTRY.hours, r.hours);
-  p.set(ENTRY.amount, r.amount);
+  p.set(ENTRY.amount, amountText(r));
   return p;
 }
 async function post(formId, paramsString){
@@ -287,7 +300,7 @@ el.submit.onclick = () => {
   el.err.textContent = '';
   el.sum.innerHTML = [
     ['專案', r.f.label], ['姓名', r.name], ['日期', r.date], ['勞務內容', r.content],
-    ['時段', r.slots.length ? slotsText(r.slots) : '（無）'], ['時數', r.hours + ' 小時'], ['金額', 'TWD ' + r.amount]
+    ['時段', r.slots.length ? slotsText(r.slots) : '（無）'], ['時數', r.hours + ' 小時'], ['金額', `${currency} ${r.amount}`]
   ].map(([k,v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('');
   openSheet();
 };
@@ -297,7 +310,7 @@ el.confirm.onclick = async () => {
   el.confirm.disabled = true;
   const ts = Date.now();
   const params = buildParams(r).toString();
-  const rec = { ts, project, label:r.f.label, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, status:'queued' };
+  const rec = { ts, project, label:r.f.label, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, currency, status:'queued' };
   let sent = false;
   try { rec.via = await post(r.f.id, params); sent = true; } catch(e){ rec.err = String(e && e.message || e); }
   rec.status = sent ? 'sent' : 'queued';
@@ -321,7 +334,7 @@ function renderContents(){
 }
 function renderHist(){
   const h = store.get('history', []);
-  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.label)}｜${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜TWD ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>${x.err ? `<li class="l" style="padding-top:0;border:none;color:var(--danger)">錯誤：${escapeHtml(x.err)}</li>` : ''}`).join('')
+  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.label)}｜${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜${escapeHtml(x.currency || 'TWD')} ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>${x.err ? `<li class="l" style="padding-top:0;border:none;color:var(--danger)">錯誤：${escapeHtml(x.err)}</li>` : ''}`).join('')
     : '<li class="l">還沒有紀錄</li>';
 }
 function renderStatus(){
@@ -343,7 +356,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
 (function init(){
   el.name.value = store.get('name', '');
   el.date.value = todayLocal();
-  renderProjects(); addSlot(); renderContents(); renderHist(); renderStatus(); recalc();
+  renderProjects(); renderCurrency(); addSlot(); renderContents(); renderHist(); renderStatus(); recalc();
   el.retry.onclick = retryQueue;
   window.addEventListener('online', () => { renderStatus(); flushQueue(); });
   window.addEventListener('offline', renderStatus);
