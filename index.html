@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>紀錄時數</title>
+<meta name="description" content="好意思文化 勞報時數回填 手機版">
+<meta name="theme-color" content="#00897b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="紀錄時數">
+<style>
+  :root{
+    --bg:#f2f6f5; --card:#ffffff; --ink:#15211f; --muted:#6b7b78; --line:#dde5e3;
+    --accent:#00897b; --accent-ink:#ffffff; --accent-soft:#d9efeb; --danger:#c0392b; --ok:#2e7d32;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1514; --card:#182120; --ink:#e8efed; --muted:#93a39f; --line:#2a3634;
+      --accent:#26a69a; --accent-ink:#06201c; --accent-soft:#163a35;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+  body{padding:env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px)}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.02em}
+  .status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+  .dot.off{background:var(--danger)}
+  main{padding:0 16px;max-width:520px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  label.lbl{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+  input[type=text],input[type=number],input[type=date],input[type=time],textarea{
+    width:100%;font:inherit;font-size:17px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;outline:none;-webkit-appearance:none;appearance:none}
+  input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  textarea{min-height:70px;resize:vertical}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1;min-width:0}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:8px 14px;font:inherit;font-size:15px;cursor:pointer}
+  .chip[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  .slot{display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+  .slot .tilde{color:var(--muted)}
+  .slot .x{background:none;border:none;color:var(--muted);font-size:22px;line-height:1;padding:6px 8px;cursor:pointer}
+  .ghost{background:none;border:1px dashed var(--line);color:var(--accent);border-radius:10px;padding:10px;width:100%;font:inherit;font-size:15px;cursor:pointer}
+  .calc{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:10px}
+  .calc .big{font-size:22px;font-weight:700}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .auto{font-size:11px;color:var(--accent);margin-left:6px}
+  button.primary{width:100%;font:inherit;font-size:18px;font-weight:700;background:var(--accent);color:var(--accent-ink);border:none;border-radius:var(--radius);padding:16px;cursor:pointer;margin-top:4px}
+  button.primary:disabled{opacity:.5}
+  .err{color:var(--danger);font-size:13px;margin-top:8px;min-height:1em}
+  .toast{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 20px);background:var(--ink);color:var(--bg);padding:12px 16px;border-radius:12px;font-size:15px;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;z-index:20;text-align:center}
+  .toast.show{opacity:1;transform:none}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:10}
+  .sheet-bg.show{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);z-index:11;transform:translateY(100%);transition:.25s;max-width:520px;margin:0 auto}
+  .sheet.show{transform:none}
+  .sheet h2{margin:0 0 10px;font-size:17px}
+  .sum{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:15px;margin-bottom:14px}
+  .sum dt{color:var(--muted)}
+  .sum dd{margin:0;word-break:break-word}
+  .hist{list-style:none;margin:0;padding:0}
+  .hist li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+  .hist li:first-child{border-top:none}
+  .hist .l{color:var(--muted);font-size:12px}
+  .badge{font-size:11px;padding:2px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .badge.q{background:#fdecc8;color:#8a5a00}
+  details summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .install{font-size:13px;color:var(--muted);text-align:center;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>紀錄時數</h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">連線中</span></div>
+</header>
+<main>
+  <section class="card">
+    <label class="lbl">專案</label>
+    <div class="chips" id="projects"></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div><label class="lbl" for="name">姓名</label><input id="name" type="text" autocomplete="name" placeholder="你的名字"></div>
+      <div style="flex:.7"><label class="lbl" for="rate">時薪（只存手機）</label><input id="rate" type="number" inputmode="numeric" placeholder="例如 250" min="0" step="1"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <label class="lbl" for="date">實際工作日期</label>
+    <input id="date" type="date">
+    <label class="lbl" for="content" style="margin-top:12px">勞務內容</label>
+    <input id="content" type="text" placeholder="做了什麼" list="contentList" autocomplete="off">
+    <datalist id="contentList"></datalist>
+  </section>
+
+  <section class="card">
+    <label class="lbl">時段（24 小時制）<span id="slotReq" class="auto"></span></label>
+    <div id="slots"></div>
+    <button class="ghost" id="addSlot" type="button">＋ 再加一段</button>
+    <div class="calc">
+      <div><label class="lbl" for="hours" style="margin:0">時數<span class="auto" id="hoursAuto">自動</span></label>
+        <input id="hours" type="number" inputmode="decimal" step="0.5" min="0" style="width:120px"></div>
+      <div style="text-align:right"><label class="lbl" for="amount" style="margin:0">勞務總金額 TWD<span class="auto" id="amountAuto">自動</span></label>
+        <input id="amount" type="number" inputmode="numeric" step="1" min="0" style="width:140px;text-align:right"></div>
+    </div>
+    <div class="hint">時數＝各時段加總；金額＝時數×時薪。手動改過就不再自動算，清空即恢復。</div>
+  </section>
+
+  <div class="err" id="err"></div>
+  <button class="primary" id="submit" type="button">送出</button>
+
+  <section class="card" style="margin-top:14px">
+    <details open>
+      <summary>最近送出（只存在這支手機）</summary>
+      <ul class="hist" id="hist"></ul>
+    </details>
+  </section>
+
+  <p class="install" id="installHint"></p>
+</main>
+
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <h2>確認送出</h2>
+  <dl class="sum" id="sum"></dl>
+  <button class="primary" id="confirm" type="button">確認送出</button>
+  <button class="ghost" id="cancel" type="button" style="margin-top:8px">返回修改</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== 表單對應（5 張表單結構相同，entry ID 一致）=====
+const FORMS = {
+  internal:  { label:'內部',     id:'1FAIpQLScc5hjHWir6A3O6u-EjRhdy3mxo6j2l6e9brql25Fc65V7PVQ', slotRequired:true  },
+  guangyuan: { label:'光園',     id:'1FAIpQLSd30w7E6iH69_fPZpC0MFVyQOGr94o2Ftl2TCL_WzmVFY2Fhw', slotRequired:false },
+  game:      { label:'遊戲開發', id:'1FAIpQLSdkyzA0oR3UaCytvOPKIeyY5uQCGI2HoYqXujTEVS3hGImF0g', slotRequired:true  },
+  expert:    { label:'專家',     id:'1FAIpQLSeMbz4_-mSdjHV8RdQLh5WK8RdHRbUuBiR87lAkkQkFZUG3_A', slotRequired:false },
+  lighting:  { label:'燈光',     id:'1FAIpQLSelrkFV6OfA5ASnNmUn-LkMjAZhcGiTsLMHCyZVjH3bVkyRPg', slotRequired:false },
+};
+const ENTRY = { name:'entry.1470428179', date:'entry.659969019', content:'entry.1224827017', slots:'entry.1048256880', hours:'entry.2113272591', amount:'entry.723088542' };
+const KEY = 'h14hours.';
+
+// ===== 儲存 =====
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(KEY+k); return v===null? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(KEY+k, JSON.stringify(v)); }catch(e){} }
+};
+
+const $ = id => document.getElementById(id);
+const el = { projects:$('projects'), name:$('name'), rate:$('rate'), date:$('date'), content:$('content'), contentList:$('contentList'),
+  slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'), amountAuto:$('amountAuto'),
+  err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
+  toast:$('toast'), dot:$('dot'), statusText:$('statusText'), slotReq:$('slotReq'), installHint:$('installHint') };
+
+let project = store.get('project', 'internal');
+let hoursManual = false, amountManual = false;
+
+// ===== 專案 chips =====
+function renderProjects(){
+  el.projects.innerHTML = '';
+  for (const [k, f] of Object.entries(FORMS)){
+    const b = document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=f.label;
+    b.setAttribute('aria-pressed', k===project);
+    b.onclick = () => { project = k; store.set('project', k); renderProjects(); };
+    el.projects.appendChild(b);
+  }
+  el.slotReq.textContent = FORMS[project].slotRequired ? '必填' : '選填';
+}
+
+// ===== 時段 =====
+function addSlot(start='', end=''){
+  const d = document.createElement('div'); d.className='slot';
+  d.innerHTML = `<input type="time" step="1800" value="${start}" aria-label="開始"><span class="tilde">～</span><input type="time" step="1800" value="${end}" aria-label="結束"><button type="button" class="x" aria-label="刪除">×</button>`;
+  d.querySelector('.x').onclick = () => { d.remove(); if(!el.slots.children.length) addSlot(); recalc(); };
+  d.querySelectorAll('input').forEach(i => i.addEventListener('input', recalc));
+  el.slots.appendChild(d);
+}
+function readSlots(){
+  const out = [];
+  for (const d of el.slots.children){
+    const [s, e] = [...d.querySelectorAll('input')].map(i => i.value);
+    if (s && e) out.push([s, e]);
+  }
+  return out;
+}
+function slotHours([s, e]){
+  const m = t => { const [h, mm] = t.split(':').map(Number); return h*60+mm; };
+  let diff = m(e) - m(s); if (diff <= 0) diff += 24*60; // 跨午夜
+  return diff/60;
+}
+function slotsText(slots){ return slots.map(([s,e]) => `${s}-${e}`).join(', '); }
+
+function recalc(){
+  const slots = readSlots();
+  if (!hoursManual){
+    const h = slots.reduce((a, s) => a + slotHours(s), 0);
+    el.hours.value = slots.length ? String(Math.round(h*100)/100) : '';
+  }
+  if (!amountManual){
+    const h = parseFloat(el.hours.value), r = parseFloat(el.rate.value);
+    el.amount.value = (h>0 && r>0) ? String(Math.round(h*r)) : '';
+  }
+  el.hoursAuto.style.display = hoursManual ? 'none' : '';
+  el.amountAuto.style.display = amountManual ? 'none' : '';
+}
+el.hours.addEventListener('input', () => { hoursManual = el.hours.value !== ''; if(!hoursManual) recalc(); else { if(!amountManual){ const h=parseFloat(el.hours.value), r=parseFloat(el.rate.value); el.amount.value=(h>0&&r>0)?String(Math.round(h*r)):''; } el.hoursAuto.style.display='none'; } });
+el.amount.addEventListener('input', () => { amountManual = el.amount.value !== ''; if(!amountManual) recalc(); else el.amountAuto.style.display='none'; });
+el.rate.addEventListener('input', () => { store.set('rate', el.rate.value); recalc(); });
+el.name.addEventListener('input', () => store.set('name', el.name.value.trim()));
+el.addSlot.onclick = () => addSlot();
+
+// ===== 日期 =====
+function todayLocal(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+// ===== 驗證 =====
+function collect(){
+  const f = FORMS[project];
+  const name = el.name.value.trim(), date = el.date.value, content = el.content.value.trim();
+  const slots = readSlots(), hours = el.hours.value.trim(), amount = el.amount.value.trim();
+  const problems = [];
+  if (!name) problems.push('姓名');
+  if (!date) problems.push('日期');
+  if (!content) problems.push('勞務內容');
+  if (f.slotRequired && !slots.length) problems.push('時段');
+  if (!hours || !(parseFloat(hours) > 0)) problems.push('時數');
+  if (!amount || !(parseFloat(amount) >= 0)) problems.push('金額');
+  return { f, name, date, content, slots, hours, amount, problems };
+}
+
+// ===== 送出 =====
+function buildParams(r){
+  const [y, m, d] = r.date.split('-');
+  const p = new URLSearchParams();
+  p.set(ENTRY.name, r.name);
+  p.set(ENTRY.date+'_year', y); p.set(ENTRY.date+'_month', String(+m)); p.set(ENTRY.date+'_day', String(+d));
+  p.set(ENTRY.content, r.content);
+  if (r.slots.length) p.set(ENTRY.slots, slotsText(r.slots));
+  p.set(ENTRY.hours, r.hours);
+  p.set(ENTRY.amount, r.amount);
+  return p;
+}
+async function post(formId, paramsString){
+  if (!navigator.onLine) throw new Error('offline');
+  await fetch(`https://docs.google.com/forms/d/e/${formId}/formResponse`, { method:'POST', mode:'no-cors', body:new URLSearchParams(paramsString), keepalive:true });
+}
+
+async function flushQueue(){
+  const q = store.get('queue', []);
+  if (!q.length || !navigator.onLine) return;
+  const rest = [];
+  for (const item of q){
+    try { await post(item.formId, item.params); markSent(item.ts); }
+    catch(e){ rest.push(item); }
+  }
+  store.set('queue', rest);
+  renderHist(); renderStatus();
+}
+function markSent(ts){
+  const h = store.get('history', []);
+  const it = h.find(x => x.ts === ts); if (it){ it.status = 'sent'; store.set('history', h); }
+}
+
+el.submit.onclick = () => {
+  const r = collect();
+  if (r.problems.length){ el.err.textContent = '還沒填：' + r.problems.join('、'); return; }
+  el.err.textContent = '';
+  el.sum.innerHTML = [
+    ['專案', r.f.label], ['姓名', r.name], ['日期', r.date], ['勞務內容', r.content],
+    ['時段', r.slots.length ? slotsText(r.slots) : '（無）'], ['時數', r.hours + ' 小時'], ['金額', 'TWD ' + r.amount]
+  ].map(([k,v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('');
+  openSheet();
+};
+el.cancel.onclick = closeSheet; el.sheetBg.onclick = closeSheet;
+el.confirm.onclick = async () => {
+  const r = collect(); if (r.problems.length){ closeSheet(); return; }
+  el.confirm.disabled = true;
+  const ts = Date.now();
+  const params = buildParams(r).toString();
+  const rec = { ts, project, label:r.f.label, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, status:'queued' };
+  let sent = false;
+  try { await post(r.f.id, params); sent = true; } catch(e){}
+  rec.status = sent ? 'sent' : 'queued';
+  if (!sent){ const q = store.get('queue', []); q.push({ ts, formId:r.f.id, params }); store.set('queue', q); }
+  const h = store.get('history', []); h.unshift(rec); store.set('history', h.slice(0, 30));
+  rememberContent(r.content);
+  el.confirm.disabled = false; closeSheet();
+  toast(sent ? `已送出到「${r.f.label}」` : '目前離線，已暫存，連線後自動送出');
+  resetEntry(); renderHist(); renderStatus();
+};
+
+function resetEntry(){
+  el.content.value = ''; el.slots.innerHTML = ''; addSlot();
+  hoursManual = false; amountManual = false; recalc();
+}
+function rememberContent(c){
+  const list = store.get('contents', []).filter(x => x !== c); list.unshift(c); store.set('contents', list.slice(0, 12)); renderContents();
+}
+function renderContents(){
+  el.contentList.innerHTML = store.get('contents', []).map(c => `<option value="${escapeHtml(c)}">`).join('');
+}
+function renderHist(){
+  const h = store.get('history', []);
+  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.label)}｜${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜TWD ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>`).join('')
+    : '<li class="l">還沒有紀錄</li>';
+}
+function renderStatus(){
+  const q = store.get('queue', []).length;
+  const on = navigator.onLine;
+  el.dot.className = 'dot' + (on ? '' : ' off');
+  el.statusText.textContent = (on ? '連線中' : '離線') + (q ? `・待送 ${q} 筆` : '');
+}
+
+// ===== UI 小工具 =====
+function openSheet(){ el.sheetBg.classList.add('show'); el.sheet.classList.add('show'); }
+function closeSheet(){ el.sheetBg.classList.remove('show'); el.sheet.classList.remove('show'); }
+let toastT; function toast(msg){ el.toast.textContent = msg; el.toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.toast.classList.remove('show'), 2600); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ===== 啟動 =====
+(function init(){
+  el.name.value = store.get('name', '');
+  el.rate.value = store.get('rate', '');
+  el.date.value = todayLocal();
+  renderProjects(); addSlot(); renderContents(); renderHist(); renderStatus(); recalc();
+  window.addEventListener('online', () => { renderStatus(); flushQueue(); });
+  window.addEventListener('offline', renderStatus);
+  flushQueue();
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (!standalone){
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    el.installHint.textContent = ios ? '加到主畫面：Safari 下方「分享」→「加入主畫面」' : '加到主畫面：瀏覽器選單 →「安裝應用程式」或「加到主畫面」';
+  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
