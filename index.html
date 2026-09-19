@@ -88,10 +88,7 @@
   </section>
 
   <section class="card">
-    <div class="row">
-      <div><label class="lbl" for="name">姓名</label><input id="name" type="text" autocomplete="name" placeholder="你的名字"></div>
-      <div style="flex:.7"><label class="lbl" for="rate">時薪（只存手機）</label><input id="rate" type="number" inputmode="numeric" placeholder="例如 250" min="0" step="1"></div>
-    </div>
+    <label class="lbl" for="name">姓名</label><input id="name" type="text" autocomplete="name" placeholder="你的名字">
   </section>
 
   <section class="card">
@@ -109,10 +106,10 @@
     <div class="calc">
       <div><label class="lbl" for="hours" style="margin:0">時數<span class="auto" id="hoursAuto">自動</span></label>
         <input id="hours" type="number" inputmode="decimal" step="0.5" min="0" style="width:120px"></div>
-      <div style="text-align:right"><label class="lbl" for="amount" style="margin:0">勞務總金額 TWD<span class="auto" id="amountAuto">自動</span></label>
+      <div style="text-align:right"><label class="lbl" for="amount" style="margin:0">勞務總金額 TWD（時數×時薪）</label>
         <input id="amount" type="number" inputmode="numeric" step="1" min="0" style="width:140px;text-align:right"></div>
     </div>
-    <div class="hint">時數＝各時段加總；金額＝時數×時薪。手動改過就不再自動算，清空即恢復。</div>
+    <div class="hint">時數＝各時段自動加總，可手動改；清空即恢復自動。</div>
   </section>
 
   <div class="err" id="err"></div>
@@ -156,13 +153,13 @@ const store = {
 };
 
 const $ = id => document.getElementById(id);
-const el = { projects:$('projects'), name:$('name'), rate:$('rate'), date:$('date'), content:$('content'), contentList:$('contentList'),
-  slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'), amountAuto:$('amountAuto'),
+const el = { projects:$('projects'), name:$('name'), date:$('date'), content:$('content'), contentList:$('contentList'),
+  slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'),
   err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
   toast:$('toast'), dot:$('dot'), statusText:$('statusText'), slotReq:$('slotReq'), installHint:$('installHint') };
 
 let project = store.get('project', 'internal');
-let hoursManual = false, amountManual = false;
+let hoursManual = false;
 
 // ===== 專案 chips =====
 function renderProjects(){
@@ -205,16 +202,9 @@ function recalc(){
     const h = slots.reduce((a, s) => a + slotHours(s), 0);
     el.hours.value = slots.length ? String(Math.round(h*100)/100) : '';
   }
-  if (!amountManual){
-    const h = parseFloat(el.hours.value), r = parseFloat(el.rate.value);
-    el.amount.value = (h>0 && r>0) ? String(Math.round(h*r)) : '';
-  }
   el.hoursAuto.style.display = hoursManual ? 'none' : '';
-  el.amountAuto.style.display = amountManual ? 'none' : '';
 }
-el.hours.addEventListener('input', () => { hoursManual = el.hours.value !== ''; if(!hoursManual) recalc(); else { if(!amountManual){ const h=parseFloat(el.hours.value), r=parseFloat(el.rate.value); el.amount.value=(h>0&&r>0)?String(Math.round(h*r)):''; } el.hoursAuto.style.display='none'; } });
-el.amount.addEventListener('input', () => { amountManual = el.amount.value !== ''; if(!amountManual) recalc(); else el.amountAuto.style.display='none'; });
-el.rate.addEventListener('input', () => { store.set('rate', el.rate.value); recalc(); });
+el.hours.addEventListener('input', () => { hoursManual = el.hours.value !== ''; if(!hoursManual) recalc(); else el.hoursAuto.style.display='none'; });
 el.name.addEventListener('input', () => store.set('name', el.name.value.trim()));
 el.addSlot.onclick = () => addSlot();
 
@@ -298,8 +288,8 @@ el.confirm.onclick = async () => {
 };
 
 function resetEntry(){
-  el.content.value = ''; el.slots.innerHTML = ''; addSlot();
-  hoursManual = false; amountManual = false; recalc();
+  el.content.value = ''; el.amount.value = ''; el.slots.innerHTML = ''; addSlot();
+  hoursManual = false; recalc();
 }
 function rememberContent(c){
   const list = store.get('contents', []).filter(x => x !== c); list.unshift(c); store.set('contents', list.slice(0, 12)); renderContents();
@@ -328,7 +318,6 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
 // ===== 啟動 =====
 (function init(){
   el.name.value = store.get('name', '');
-  el.rate.value = store.get('rate', '');
   el.date.value = todayLocal();
   renderProjects(); addSlot(); renderContents(); renderHist(); renderStatus(); recalc();
   window.addEventListener('online', () => { renderStatus(); flushQueue(); });
