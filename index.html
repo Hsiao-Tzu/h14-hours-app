@@ -74,6 +74,9 @@
   .badge.q{background:#fdecc8;color:#8a5a00}
   details summary{cursor:pointer;color:var(--muted);font-size:13px}
   .install{font-size:13px;color:var(--muted);text-align:center;margin-top:14px}
+  .notice{display:none;background:var(--accent-soft);color:var(--ink);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;font-size:14px;line-height:1.5}
+  .notice.show{display:block}
+  .notice button{margin-top:8px;font:inherit;font-size:14px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:10px;padding:8px 14px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -82,6 +85,10 @@
   <div class="status"><span class="dot" id="dot"></span><span id="statusText">連線中</span><button type="button" id="retry" class="chip" style="display:none;padding:4px 10px;font-size:12px">重送</button></div>
 </header>
 <main>
+  <div class="notice" id="iconNotice" role="status">
+    <b>App 封面更新了。</b>iPhone 不會自動換圖：長按主畫面的「紀錄時數」→ 移除 App → 用 Safari 開這個網址重新「加入主畫面」，就會是新封面。已送出的時數都在 Google 表單裡不受影響，只有手機上記住的姓名和「最近送出」清單會清掉。
+    <div><button type="button" id="iconNoticeOk">知道了</button></div>
+  </div>
   <section class="card">
     <label class="lbl">專案</label>
     <div class="chips" id="projects"></div>
@@ -146,6 +153,7 @@ const FORMS = {
 };
 const ENTRY = { name:'entry.1470428179', date:'entry.659969019', content:'entry.1224827017', slots:'entry.1048256880', hours:'entry.2113272591', amount:'entry.723088542' };
 const KEY = 'h14hours.';
+const ICON_VERSION = 1; // 換封面圖時 +1，已裝在 iPhone 主畫面的人會看到重新加入的提示
 
 // ===== 儲存 =====
 const store = {
@@ -346,6 +354,17 @@ function renderStatus(){
 }
 async function retryQueue(){ el.retry.disabled = true; await flushQueue(); el.retry.disabled = false; toast(store.get('queue', []).length ? '還是失敗，錯誤已列在下方' : '已全部送出'); }
 
+// ===== 封面版本提示（iPhone 主畫面圖示不會自動更新）=====
+function maybeShowIconHint(isStandalone, isIOS){
+  if (!isStandalone) return false;
+  const seen = store.get('iconVersion', null);
+  if (seen === null){ store.set('iconVersion', ICON_VERSION); return false; } // 首次以 App 開啟：視為用現行封面安裝
+  if (seen >= ICON_VERSION || !isIOS){ store.set('iconVersion', ICON_VERSION); return false; } // Android 會自動換圖，不提示
+  $('iconNotice').classList.add('show');
+  $('iconNoticeOk').onclick = () => { store.set('iconVersion', ICON_VERSION); $('iconNotice').classList.remove('show'); };
+  return true;
+}
+
 // ===== UI 小工具 =====
 function openSheet(){ el.sheetBg.classList.add('show'); el.sheet.classList.add('show'); }
 function closeSheet(){ el.sheetBg.classList.remove('show'); el.sheet.classList.remove('show'); }
@@ -362,8 +381,9 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
   window.addEventListener('offline', renderStatus);
   flushQueue();
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  maybeShowIconHint(!!standalone, ios);
   if (!standalone){
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     el.installHint.textContent = ios ? '加到主畫面：Safari 下方「分享」→「加入主畫面」' : '加到主畫面：瀏覽器選單 →「安裝應用程式」或「加到主畫面」';
   }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
