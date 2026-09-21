@@ -138,15 +138,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== 表單對應（5 張表單結構相同，entry ID 一致）=====
-const FORMS = {
-  internal:  { label:'內部',     id:'1FAIpQLScc5hjHWir6A3O6u-EjRhdy3mxo6j2l6e9brql25Fc65V7PVQ', slotRequired:true  },
-  guangyuan: { label:'視覺',     id:'1FAIpQLSd30w7E6iH69_fPZpC0MFVyQOGr94o2Ftl2TCL_WzmVFY2Fhw', slotRequired:false },
-  game:      { label:'遊戲開發', id:'1FAIpQLSdkyzA0oR3UaCytvOPKIeyY5uQCGI2HoYqXujTEVS3hGImF0g', slotRequired:true  },
-  expert:    { label:'專家',     id:'1FAIpQLSeMbz4_-mSdjHV8RdQLh5WK8RdHRbUuBiR87lAkkQkFZUG3_A', slotRequired:false },
-  lighting:  { label:'燈光',     id:'1FAIpQLSelrkFV6OfA5ASnNmUn-LkMjAZhcGiTsLMHCyZVjH3bVkyRPg', slotRequired:false },
-};
-const ENTRY = { name:'entry.1470428179', date:'entry.659969019', content:'entry.1224827017', slots:'entry.1048256880', hours:'entry.2113272591', amount:'entry.723088542' };
+// ===== 表單（2026-10-01 起單一表單「紀錄時數」，所有人同一條連結；金額純數字、幣別獨立題）=====
+const FORM = { id:'1FAIpQLScpNJznGXMU68lbl10ORKWfTn6LOodTuYsSZ6tKlE_7Zc6ApQ', slotRequired:false };
+const ENTRY = { name:'entry.1199106473', date:'entry.1369676776', content:'entry.1575083583', slots:'entry.1654114368', hours:'entry.42706418', amount:'entry.1338817019', currency:'entry.1390161811' };
 const KEY = 'h14hours.';
 const ICON_VERSION = 1; // 換封面圖時 +1，已裝在 iPhone 主畫面的人會看到重新加入的提示
 
@@ -162,22 +156,12 @@ const el = { name:$('name'), date:$('date'), content:$('content'), contentList:$
   err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
   toast:$('toast'), dot:$('dot'), statusText:$('statusText'), retry:$('retry'), slotReq:$('slotReq'), installHint:$('installHint') };
 
-// 部門（送到哪張表單）由網址參數 ?p= 決定，填寫頁不顯示、不讓人選。接受 key（internal）或標籤（視覺）。沒帶＝內部。
-function resolveProject(p){
-  if (!p) return null;
-  p = decodeURIComponent(p).trim();
-  if (FORMS[p]) return p;
-  const hit = Object.entries(FORMS).find(([, f]) => f.label === p);
-  return hit ? hit[0] : null;
-}
-let project = resolveProject(new URLSearchParams(location.search).get('p')) || 'internal';
 let currency = store.get('currency', 'TWD');
 const CURRENCIES = ['TWD', 'CNY'];
 let hoursManual = false;
 
-// ===== 部門（隱藏，由網址參數決定）=====
 function renderProjects(){
-  el.slotReq.textContent = FORMS[project].slotRequired ? '必填' : '選填';
+  el.slotReq.textContent = FORM.slotRequired ? '必填' : '選填';
 }
 function renderCurrency(){
   el.currency.innerHTML = '';
@@ -188,7 +172,7 @@ function renderCurrency(){
     el.currency.appendChild(b);
   }
 }
-function amountText(r){ return currency === 'TWD' ? r.amount : `${currency} ${r.amount}`; }
+// 金額一律純數字送出，幣別走獨立題（舊做法「CNY 500」前綴會被總表 QUERY sum 當文字丟掉，2026-09-21 對帳發現）
 
 // ===== 時段 =====
 function addSlot(start='', end=''){
@@ -230,7 +214,7 @@ function todayLocal(){ const d = new Date(); return `${d.getFullYear()}-${String
 
 // ===== 驗證 =====
 function collect(){
-  const f = FORMS[project];
+  const f = FORM;
   const name = el.name.value.trim(), date = el.date.value, content = el.content.value.trim();
   const slots = readSlots(), hours = el.hours.value.trim(), amount = el.amount.value.trim();
   const problems = [];
@@ -252,7 +236,8 @@ function buildParams(r){
   p.set(ENTRY.content, r.content);
   if (r.slots.length) p.set(ENTRY.slots, slotsText(r.slots));
   p.set(ENTRY.hours, r.hours);
-  p.set(ENTRY.amount, amountText(r));
+  p.set(ENTRY.amount, r.amount);
+  p.set(ENTRY.currency, currency);
   return p;
 }
 async function post(formId, paramsString){
@@ -314,7 +299,7 @@ el.confirm.onclick = async () => {
   el.confirm.disabled = true;
   const ts = Date.now();
   const params = buildParams(r).toString();
-  const rec = { ts, project, label:r.f.label, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, currency, status:'queued' };
+  const rec = { ts, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, currency, status:'queued' };
   let sent = false;
   try { rec.via = await post(r.f.id, params); sent = true; } catch(e){ rec.err = String(e && e.message || e); }
   rec.status = sent ? 'sent' : 'queued';
