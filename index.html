@@ -90,11 +90,6 @@
     <div><button type="button" id="iconNoticeOk">知道了</button></div>
   </div>
   <section class="card">
-    <label class="lbl">專案</label>
-    <div class="chips" id="projects"></div>
-  </section>
-
-  <section class="card">
     <label class="lbl" for="name">姓名</label><input id="name" type="text" autocomplete="name" placeholder="你的名字">
   </section>
 
@@ -162,25 +157,26 @@ const store = {
 };
 
 const $ = id => document.getElementById(id);
-const el = { projects:$('projects'), name:$('name'), date:$('date'), content:$('content'), contentList:$('contentList'),
+const el = { name:$('name'), date:$('date'), content:$('content'), contentList:$('contentList'),
   slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'), currency:$('currency'),
   err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
   toast:$('toast'), dot:$('dot'), statusText:$('statusText'), retry:$('retry'), slotReq:$('slotReq'), installHint:$('installHint') };
 
-let project = store.get('project', 'internal');
+// 部門（送到哪張表單）由網址參數 ?p= 決定，填寫頁不顯示、不讓人選。接受 key（internal）或標籤（視覺）。沒帶＝內部。
+function resolveProject(p){
+  if (!p) return null;
+  p = decodeURIComponent(p).trim();
+  if (FORMS[p]) return p;
+  const hit = Object.entries(FORMS).find(([, f]) => f.label === p);
+  return hit ? hit[0] : null;
+}
+let project = resolveProject(new URLSearchParams(location.search).get('p')) || 'internal';
 let currency = store.get('currency', 'TWD');
 const CURRENCIES = ['TWD', 'CNY'];
 let hoursManual = false;
 
-// ===== 專案 chips =====
+// ===== 部門（隱藏，由網址參數決定）=====
 function renderProjects(){
-  el.projects.innerHTML = '';
-  for (const [k, f] of Object.entries(FORMS)){
-    const b = document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=f.label;
-    b.setAttribute('aria-pressed', k===project);
-    b.onclick = () => { project = k; store.set('project', k); renderProjects(); };
-    el.projects.appendChild(b);
-  }
   el.slotReq.textContent = FORMS[project].slotRequired ? '必填' : '選填';
 }
 function renderCurrency(){
@@ -307,7 +303,7 @@ el.submit.onclick = () => {
   if (r.problems.length){ el.err.textContent = '還沒填：' + r.problems.join('、'); return; }
   el.err.textContent = '';
   el.sum.innerHTML = [
-    ['專案', r.f.label], ['姓名', r.name], ['日期', r.date], ['勞務內容', r.content],
+    ['姓名', r.name], ['日期', r.date], ['勞務內容', r.content],
     ['時段', r.slots.length ? slotsText(r.slots) : '（無）'], ['時數', r.hours + ' 小時'], ['金額', `${currency} ${r.amount}`]
   ].map(([k,v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('');
   openSheet();
@@ -326,7 +322,7 @@ el.confirm.onclick = async () => {
   const h = store.get('history', []); h.unshift(rec); store.set('history', h.slice(0, 30));
   rememberContent(r.content);
   el.confirm.disabled = false; closeSheet();
-  toast(sent ? `已送出到「${r.f.label}」` : '送出失敗，已暫存，可按「重送」');
+  toast(sent ? '已送出' : '送出失敗，已暫存，可按「重送」');
   resetEntry(); renderHist(); renderStatus();
 };
 
@@ -342,7 +338,7 @@ function renderContents(){
 }
 function renderHist(){
   const h = store.get('history', []);
-  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.label)}｜${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜${escapeHtml(x.currency || 'TWD')} ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>${x.err ? `<li class="l" style="padding-top:0;border:none;color:var(--danger)">錯誤：${escapeHtml(x.err)}</li>` : ''}`).join('')
+  el.hist.innerHTML = h.length ? h.map(x => `<li><div><div>${escapeHtml(x.date)}｜${escapeHtml(x.hours)} h｜${escapeHtml(x.currency || 'TWD')} ${escapeHtml(x.amount)}</div><div class="l">${escapeHtml(x.content)}${x.slots ? '｜'+escapeHtml(x.slots) : ''}</div></div><span class="badge ${x.status==='sent'?'':'q'}">${x.status==='sent'?'已送出':'待送出'}</span></li>${x.err ? `<li class="l" style="padding-top:0;border:none;color:var(--danger)">錯誤：${escapeHtml(x.err)}</li>` : ''}`).join('')
     : '<li class="l">還沒有紀錄</li>';
 }
 function renderStatus(){
