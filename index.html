@@ -211,6 +211,21 @@ el.addSlot.onclick = () => addSlot();
 
 // ===== 日期 =====
 function todayLocal(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+// 日期防呆：日期預設「今天」，凌晨補填昨天的工作會被記成今天（2026-09-26 00:07 報「當天」15:00-16:00）
+function dateIssue(date, slots){
+  const today = todayLocal();
+  if (date > today) return '日期在未來，請確認日期';
+  if (date === today && slots.length){
+    const now = new Date(), nowMin = now.getHours()*60 + now.getMinutes();
+    const m = t => { const [h, mm] = t.split(':').map(Number); return h*60+mm; };
+    if (slots.some(([s]) => m(s) > nowMin)) return '時段還沒到——日期是不是昨天？請確認日期';
+  }
+  return '';
+}
+// App 從背景叫回來時，沒手動改過的日期跟著換成今天（避免停在前一天）
+let dateTouched = false;
+el.date.addEventListener('input', () => { dateTouched = true; });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !dateTouched) el.date.value = todayLocal(); });
 
 // ===== 驗證 =====
 function collect(){
@@ -286,6 +301,7 @@ function markErr(ts, err){
 el.submit.onclick = () => {
   const r = collect();
   if (r.problems.length){ el.err.textContent = '還沒填：' + r.problems.join('、'); return; }
+  const di = dateIssue(r.date, r.slots); if (di){ el.err.textContent = di; return; }
   el.err.textContent = '';
   el.sum.innerHTML = [
     ['姓名', r.name], ['日期', r.date], ['勞務內容', r.content],
@@ -295,7 +311,7 @@ el.submit.onclick = () => {
 };
 el.cancel.onclick = closeSheet; el.sheetBg.onclick = closeSheet;
 el.confirm.onclick = async () => {
-  const r = collect(); if (r.problems.length){ closeSheet(); return; }
+  const r = collect(); if (r.problems.length || dateIssue(r.date, r.slots)){ closeSheet(); return; }
   el.confirm.disabled = true;
   const ts = Date.now();
   const params = buildParams(r).toString();
