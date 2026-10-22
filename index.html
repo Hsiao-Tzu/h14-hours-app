@@ -103,8 +103,15 @@
 
   <section class="card">
     <label class="lbl">時段（24 小時制）<span id="slotReq" class="auto"></span></label>
-    <div id="slots"></div>
-    <button class="ghost" id="addSlot" type="button">＋ 再加一段</button>
+    <div class="chips" style="margin-bottom:10px"><button type="button" class="chip" id="tripBtn" aria-pressed="false">出差（多天）</button></div>
+    <div id="slotBox">
+      <div id="slots"></div>
+      <button class="ghost" id="addSlot" type="button">＋ 再加一段</button>
+    </div>
+    <div id="tripBox" style="display:none">
+      <div class="slot" style="grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)"><input id="tripFrom" type="date" aria-label="出發" style="min-width:0"><span class="tilde">～</span><input id="tripTo" type="date" aria-label="回來" style="min-width:0"></div>
+      <div class="hint">出差填起訖日期，時數填整趟合計；上面的「實際工作日期」要在起訖之間。</div>
+    </div>
     <div class="calc">
       <div><label class="lbl" for="hours" style="margin:0">時數<span class="auto" id="hoursAuto">自動</span></label>
         <input id="hours" type="number" inputmode="decimal" step="0.5" min="0" style="width:120px"></div>
@@ -139,7 +146,8 @@
 
 <script>
 // ===== 表單（2026-10-01 起單一表單「紀錄時數」，所有人同一條連結；金額純數字、幣別獨立題）=====
-const FORM = { id:'1FAIpQLScpNJznGXMU68lbl10ORKWfTn6LOodTuYsSZ6tKlE_7Zc6ApQ', slotRequired:false };
+// 2026-10-22 時段改必填：只報總時數時排班 bot 無法對日曆；多天出差改用「出差」填起訖（送出成「10/18-10/22 5天」，bot 認得）
+const FORM = { id:'1FAIpQLScpNJznGXMU68lbl10ORKWfTn6LOodTuYsSZ6tKlE_7Zc6ApQ', slotRequired:true };
 const ENTRY = { name:'entry.1199106473', date:'entry.1369676776', content:'entry.1575083583', slots:'entry.1654114368', hours:'entry.42706418', amount:'entry.1338817019', currency:'entry.1390161811' };
 const KEY = 'h14hours.';
 const ICON_VERSION = 1; // 換封面圖時 +1，已裝在 iPhone 主畫面的人會看到重新加入的提示
@@ -154,7 +162,8 @@ const $ = id => document.getElementById(id);
 const el = { name:$('name'), date:$('date'), content:$('content'), contentList:$('contentList'),
   slots:$('slots'), addSlot:$('addSlot'), hours:$('hours'), amount:$('amount'), hoursAuto:$('hoursAuto'), currency:$('currency'),
   err:$('err'), submit:$('submit'), hist:$('hist'), sheet:$('sheet'), sheetBg:$('sheetBg'), sum:$('sum'), confirm:$('confirm'), cancel:$('cancel'),
-  toast:$('toast'), dot:$('dot'), statusText:$('statusText'), retry:$('retry'), slotReq:$('slotReq'), installHint:$('installHint') };
+  toast:$('toast'), dot:$('dot'), statusText:$('statusText'), retry:$('retry'), slotReq:$('slotReq'), installHint:$('installHint'),
+  tripBtn:$('tripBtn'), slotBox:$('slotBox'), tripBox:$('tripBox'), tripFrom:$('tripFrom'), tripTo:$('tripTo') };
 
 let currency = store.get('currency', 'TWD');
 const CURRENCIES = ['TWD', 'CNY'];
@@ -197,6 +206,33 @@ function slotHours([s, e]){
 }
 function slotsText(slots){ return slots.map(([s,e]) => `${s}-${e}`).join(', '); }
 
+// ===== 出差（多天）=====
+let trip = false;
+function setTrip(on){
+  trip = on; el.tripBtn.setAttribute('aria-pressed', on);
+  el.slotBox.style.display = on ? 'none' : ''; el.tripBox.style.display = on ? '' : 'none';
+  if (on){ hoursManual = true; el.hoursAuto.style.display = 'none'; if (!el.tripFrom.value) el.tripFrom.value = el.date.value; if (!el.tripTo.value) el.tripTo.value = el.date.value; }
+  else { hoursManual = el.hours.value !== '' && hoursManual; recalc(); }
+}
+el.tripBtn.onclick = () => setTrip(!trip);
+function tripDays(){
+  const f = el.tripFrom.value, t = el.tripTo.value; if (!f || !t) return 0;
+  return Math.round((Date.parse(t) - Date.parse(f)) / 86400000) + 1;
+}
+// 送出用的時段文字：一般＝「10:00-13:00, 14:00-18:00」；出差＝「10/18-10/22 5天」
+function slotValue(r){
+  if (!r.trip) return slotsText(r.slots);
+  const md = v => { const [, m, d] = v.split('-'); return `${+m}/${+d}`; };
+  return `${md(el.tripFrom.value)}-${md(el.tripTo.value)} ${tripDays()}天`;
+}
+function tripIssue(date){
+  const n = tripDays();
+  if (n < 1) return '出差回來日期早於出發日期';
+  if (n > 31) return '出差超過 31 天，請分兩筆填';
+  if (date < el.tripFrom.value || date > el.tripTo.value) return '實際工作日期要在出差起訖之間';
+  return '';
+}
+
 function recalc(){
   const slots = readSlots();
   if (!hoursManual){
@@ -236,10 +272,11 @@ function collect(){
   if (!name) problems.push('姓名');
   if (!date) problems.push('日期');
   if (!content) problems.push('勞務內容');
-  if (f.slotRequired && !slots.length) problems.push('時段');
+  if (trip){ if (!el.tripFrom.value || !el.tripTo.value) problems.push('出差起訖'); }
+  else if (f.slotRequired && !slots.length) problems.push('時段');
   if (!hours || !(parseFloat(hours) > 0)) problems.push('時數');
   if (!amount || !(parseFloat(amount) >= 0)) problems.push('金額');
-  return { f, name, date, content, slots, hours, amount, problems };
+  return { f, name, date, content, slots: trip ? [] : slots, trip, hours, amount, problems };
 }
 
 // ===== 送出 =====
@@ -249,7 +286,7 @@ function buildParams(r){
   p.set(ENTRY.name, r.name);
   p.set(ENTRY.date+'_year', y); p.set(ENTRY.date+'_month', String(+m)); p.set(ENTRY.date+'_day', String(+d));
   p.set(ENTRY.content, r.content);
-  if (r.slots.length) p.set(ENTRY.slots, slotsText(r.slots));
+  const sv = slotValue(r); if (sv) p.set(ENTRY.slots, sv);
   p.set(ENTRY.hours, r.hours);
   p.set(ENTRY.amount, r.amount);
   p.set(ENTRY.currency, currency);
@@ -301,21 +338,21 @@ function markErr(ts, err){
 el.submit.onclick = () => {
   const r = collect();
   if (r.problems.length){ el.err.textContent = '還沒填：' + r.problems.join('、'); return; }
-  const di = dateIssue(r.date, r.slots); if (di){ el.err.textContent = di; return; }
+  const di = dateIssue(r.date, r.slots) || (r.trip ? tripIssue(r.date) : ''); if (di){ el.err.textContent = di; return; }
   el.err.textContent = '';
   el.sum.innerHTML = [
     ['姓名', r.name], ['日期', r.date], ['勞務內容', r.content],
-    ['時段', r.slots.length ? slotsText(r.slots) : '（無）'], ['時數', r.hours + ' 小時'], ['金額', `${currency} ${r.amount}`]
+    ['時段', slotValue(r) || '（無）'], ['時數', r.hours + ' 小時'], ['金額', `${currency} ${r.amount}`]
   ].map(([k,v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('');
   openSheet();
 };
 el.cancel.onclick = closeSheet; el.sheetBg.onclick = closeSheet;
 el.confirm.onclick = async () => {
-  const r = collect(); if (r.problems.length || dateIssue(r.date, r.slots)){ closeSheet(); return; }
+  const r = collect(); if (r.problems.length || dateIssue(r.date, r.slots) || (r.trip && tripIssue(r.date))){ closeSheet(); return; }
   el.confirm.disabled = true;
   const ts = Date.now();
   const params = buildParams(r).toString();
-  const rec = { ts, name:r.name, date:r.date, content:r.content, slots:slotsText(r.slots), hours:r.hours, amount:r.amount, currency, status:'queued' };
+  const rec = { ts, name:r.name, date:r.date, content:r.content, slots:slotValue(r), hours:r.hours, amount:r.amount, currency, status:'queued' };
   let sent = false;
   try { rec.via = await post(r.f.id, params); sent = true; } catch(e){ rec.err = String(e && e.message || e); }
   rec.status = sent ? 'sent' : 'queued';
@@ -329,6 +366,7 @@ el.confirm.onclick = async () => {
 
 function resetEntry(){
   el.content.value = ''; el.amount.value = ''; el.slots.innerHTML = ''; addSlot();
+  el.tripFrom.value = ''; el.tripTo.value = ''; setTrip(false);
   hoursManual = false; recalc();
 }
 function rememberContent(c){
