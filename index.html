@@ -96,7 +96,7 @@
 <main>
   <div class="notice" id="iconNotice" role="status">
     <b>App 封面換新了。</b>iPhone 不會自動換圖。按下面的按鈕會用 Safari 打開，照畫面上的三個步驟做就好（約 20 秒）。
-    <div class="row"><button type="button" id="iconGo">用 Safari 換新封面</button><button type="button" class="sec" id="iconNoticeOk">先不要</button></div>
+    <div class="row"><button type="button" id="iconGo">用 Safari 換新封面</button><button type="button" class="sec" id="iconNoticeOk">明天再說</button></div>
     <span class="url" id="iconUrl" hidden></span>
   </div>
   <div class="notice" id="reinstall" role="status">
@@ -411,11 +411,17 @@ async function retryQueue(){ el.retry.disabled = true; await flushQueue(); el.re
 // ===== 封面版本提示（iPhone 主畫面圖示不會自動更新）=====
 function maybeShowIconHint(isStandalone, isIOS){
   if (!isStandalone) return false;
-  const seen = store.get('iconVersion', null);
-  if (seen === null){ store.set('iconVersion', ICON_VERSION); return false; } // 首次以 App 開啟：視為用現行封面安裝
-  if (seen >= ICON_VERSION || !isIOS){ store.set('iconVersion', ICON_VERSION); return false; } // Android 會自動換圖，不提示
+  // 'iconAsk'＝這個主畫面 App 是用哪一版封面裝的（2026-11-09 改用新鍵：舊鍵 iconVersion 可能已被 16:25 那版的「知道了」記成 2）
+  let ver = store.get('iconAsk', null);
+  if (ver === null){
+    // 第一次記錄：手機上已有姓名或送出紀錄＝早就裝好的舊 App；什麼都沒有＝剛用新封面加入主畫面
+    const used = !!store.get('name', '') || store.get('history', []).length > 0;
+    ver = used ? 1 : ICON_VERSION; store.set('iconAsk', ver);
+  }
+  if (ver >= ICON_VERSION || !isIOS){ store.set('iconAsk', ICON_VERSION); return false; } // Android 會自動換圖，不提示
+  if (store.get('iconSnooze', '') === todayLocal()) return false; // 今天按過「先不要」
   $('iconNotice').classList.add('show');
-  $('iconNoticeOk').onclick = () => { store.set('iconVersion', ICON_VERSION); $('iconNotice').classList.remove('show'); };
+  $('iconNoticeOk').onclick = () => { store.set('iconSnooze', todayLocal()); $('iconNotice').classList.remove('show'); };
   $('iconGo').onclick = openInSafari;
   return true;
 }
