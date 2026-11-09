@@ -76,6 +76,15 @@
   .install{font-size:13px;color:var(--muted);text-align:center;margin-top:14px}
   .notice{display:none;background:var(--accent-soft);color:var(--ink);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;font-size:14px;line-height:1.5}
   .notice.show{display:block}
+  .notice .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .notice .row button{margin-top:0}
+  .notice button.sec{background:none;color:var(--accent);border:1px solid var(--accent)}
+  .notice .url{display:block;margin-top:8px;padding:8px 10px;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:13px;word-break:break-all;-webkit-user-select:all;user-select:all}
+  .notice .url[hidden]{display:none}
+  .steps{margin:8px 0 6px;padding-left:0;list-style:none;counter-reset:s}
+  .steps li{counter-increment:s;position:relative;padding:8px 0 8px 40px;font-size:16px;line-height:1.45;border-top:1px solid var(--line)}
+  .steps li:first-child{border-top:none}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:8px;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px}
   .notice button{margin-top:8px;font:inherit;font-size:14px;background:var(--accent);color:var(--accent-ink);border:none;border-radius:10px;padding:8px 14px;cursor:pointer}
 </style>
 </head>
@@ -86,8 +95,18 @@
 </header>
 <main>
   <div class="notice" id="iconNotice" role="status">
-    <b>App 封面更新了。</b>iPhone 不會自動換圖：長按主畫面的「紀錄時數」→ 移除 App → 用 Safari 開這個網址重新「加入主畫面」，就會是新封面。已送出的時數都在 Google 表單裡不受影響，只有手機上記住的姓名和「最近送出」清單會清掉。
-    <div><button type="button" id="iconNoticeOk">知道了</button></div>
+    <b>App 封面換新了。</b>iPhone 不會自動換圖。按下面的按鈕會用 Safari 打開，照畫面上的三個步驟做就好（約 20 秒）。
+    <div class="row"><button type="button" id="iconGo">用 Safari 換新封面</button><button type="button" class="sec" id="iconNoticeOk">先不要</button></div>
+    <span class="url" id="iconUrl" hidden></span>
+  </div>
+  <div class="notice" id="reinstall" role="status">
+    <b>換新封面：照這三步做</b>
+    <ol class="steps">
+      <li>點 Safari 的<b>「分享」</b>（方框加向上箭頭；新版 iPhone 先點右下<b>「⋯」</b>再點「分享」）</li>
+      <li>往下滑，點<b>「加入主畫面」</b>→ 右上角<b>「加入」</b></li>
+      <li>回到主畫面，<b>長按舊的綠色時鐘圖示</b>→「移除 App」→「從主畫面移除」</li>
+    </ol>
+    <div class="hint">用新的小鳥圖示打開後，姓名要重新填一次；已送出的時數都在表單裡，不受影響。</div>
   </div>
   <section class="card">
     <label class="lbl" for="name">姓名</label><input id="name" type="text" autocomplete="name" placeholder="你的名字">
@@ -397,6 +416,26 @@ function maybeShowIconHint(isStandalone, isIOS){
   if (seen >= ICON_VERSION || !isIOS){ store.set('iconVersion', ICON_VERSION); return false; } // Android 會自動換圖，不提示
   $('iconNotice').classList.add('show');
   $('iconNoticeOk').onclick = () => { store.set('iconVersion', ICON_VERSION); $('iconNotice').classList.remove('show'); };
+  $('iconGo').onclick = openInSafari;
+  return true;
+}
+// 從主畫面 App 跳到 Safari 的換封面頁：x-safari-https:// 由 iOS 17+ 直接交給 Safari；
+// 沒反應（舊 iOS）就把網址秀出來＋複製到剪貼簿，讓本人貼到 Safari。
+function openInSafari(){
+  const url = new URL('./?reinstall=1', location.href).href;
+  try { navigator.clipboard && navigator.clipboard.writeText(url).catch(() => {}); } catch(e){}
+  location.href = 'x-safari-' + url;
+  setTimeout(() => {
+    if (document.visibilityState !== 'visible') return; // 已跳到 Safari
+    const u = $('iconUrl'); u.textContent = url; u.hidden = false;
+    toast('網址已複製：打開 Safari，在網址列貼上');
+  }, 1500);
+}
+// Safari 端（?reinstall=1）：顯示三步驟，並把網址還原成首頁，避免加入主畫面時帶著參數
+function maybeShowReinstall(isStandalone){
+  if (isStandalone || new URLSearchParams(location.search).get('reinstall') !== '1') return false;
+  $('reinstall').classList.add('show');
+  try { history.replaceState(null, '', location.pathname); } catch(e){}
   return true;
 }
 
@@ -418,6 +457,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   maybeShowIconHint(!!standalone, ios);
+  maybeShowReinstall(!!standalone);
   if (!standalone){
     el.installHint.textContent = ios ? '加到主畫面：Safari 下方「分享」→「加入主畫面」' : '加到主畫面：瀏覽器選單 →「安裝應用程式」或「加到主畫面」';
   }
